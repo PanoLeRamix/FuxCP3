@@ -16,7 +16,7 @@
     (print "Initializing variables...")
     
     ; add the counterpoint array to the space with the domain *cp-domain
-    (setf (first (cp counterpoint)) (gil::add-int-var-array-dom *sp* *cf-len (extended-cp-domain counterpoint)))
+    ;(setf (first (cp counterpoint)) (gil::add-int-var-array-dom *sp* *cf-len (extended-cp-domain counterpoint)))
     
     ; @completely new or reworked
     ; ======= 2 counterpoints specific

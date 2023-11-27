@@ -211,7 +211,7 @@
     ; 6st species variables
     (variety-cost :accessor variety-cost :initarg :variety-cost :initform nil)
     ;(is-voice-bass :accessor is-voice-bass :initarg :is-voice-bass :initform 0)
-    (is-bass-arr :accessor is-bass-arr :initarg :is-bass-arr :initform nil)
+    (is-bass-arr :accessor is-bass-arr :initarg :is-bass-arr :initform (list nil nil nil nil))
 ))
 
 ; @completely new or reworked
@@ -241,8 +241,9 @@
                                                :extended-cp-domain extended-cp-domain
                                                :off-domain off-domain
                                                :voice-type voice-type
-                                               :species species)
-            )
+                                               :species species
+                                               :cp (list (gil::add-int-var-array-dom *sp* *cf-len extended-cp-domain) nil nil nil)
+            ))
         )
     )
 )
@@ -274,6 +275,9 @@
     (if (>= *nth-voice-is-bass 0) (setf (is-voice-bass (nth *nth-voice-is-bass counterpoints)) 1))
     |#
     ;(setq *cost-indexes (make-instance 'cost-indexes-class))
+    (setq *bass-array (list nil nil nil nil))
+    (create-is-voice-bass-arr *cf counterpoints)
+    
     (case (length species-list)
         (1 (case (first species-list) ; if only two voices
             (1 (progn
@@ -464,8 +468,12 @@
         (print (list "h-intervals2 = " (gil::g-values sol (first (h-intervals (second counterpoints))))))
         (print (list "h-intervals1-2 = " (gil::g-values sol (first *h-intervals-1-2))))
         (print (list "ALL_CONS_VAR = " (gil::g-values sol ALL_CONS_VAR)))
-        (print (list "is-cf-bass = " (gil::g-values sol *is-cf-bass-print)))
-        (print (list "temp-1 = " (gil::g-values sol *temp-1)))
+        (handler-case (print (list "is-cp1-bass = " (gil::g-values sol *is-cp1-bass-print))) (error (c)  (print "error with is-cp1-bass")))
+        (handler-case (print (list "is-cp2-bass = " (gil::g-values sol *is-cp2-bass-print))) (error (c)  (print "error with is-cp2-bass")))
+        (handler-case (print (list "is-cf-bass  = " (gil::g-values sol *is-cf-bass-print))) (error (c) (print "error with is-cf-bass")))
+        
+        
+        ;(print (list "temp-1 = " (gil::g-values sol *temp-1)))
         ;(print (list "temp-2 = " (gil::g-values sol *temp-2)))
         ;(print (list "temp-1-2 = " (gil::g-values sol *temp-1-2)))
         (print (list "cp1 = " (gil::g-values sol (first (cp (first counterpoints))))))
