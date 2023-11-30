@@ -55,6 +55,11 @@
     ; 9 in IntVar (major sixth)
     (defparameter NINE (gil::add-int-var-dom *sp* (list 9)))
 
+    (defparameter CANTUS_FIRMUS (gil::add-int-var-array *sp* *cf-len 0 120))
+    (dotimes (i *cf-len)
+        (gil::g-rel *sp* (nth i CANTUS_FIRMUS) gil::IRT_EQ (nth i *cf))
+    )
+
     ; Boolean constants
     ; 0 in BoolVar
     (defparameter FALSE (gil::add-bool-var *sp* 0 0))
@@ -132,7 +137,33 @@
 )
 
 ; @completely new or reworked
+(defclass bass-notes-class () (
+    (cp :accessor cp :initarg :cp :initform 
+        (list 
+            (gil::add-int-var-array *sp* *cf-len 0 120)
+            (gil::add-int-var-array *sp* *cf-len 0 120)
+            (gil::add-int-var-array *sp* *cf-len 0 120)
+            (gil::add-int-var-array *sp* *cf-len 0 120)
+        )
+    ) ; represents the notes of the counterpoint
+    (h-intervals :accessor h-intervals :initarg :h-intervals :initform 
+        (list
+            (gil::add-int-var-array *sp* *cf-len 0 11)
+            (gil::add-int-var-array *sp* *cf-len 0 11)
+            (gil::add-int-var-array *sp* *cf-len 0 11)
+            (gil::add-int-var-array *sp* *cf-len 0 11)
+        )
+    )
+    (is-p-cons-arr :accessor is-p-cons-arr :initarg :is-p-cons-arr :initform nil)
+    (m-intervals :accessor m-intervals :initarg :m-intervals :initform (list (gil::add-int-var-array *sp* *cf-last-index 0 12) nil nil nil))
+    (m-intervals-brut :accessor m-intervals-brut :initarg :m-intervals-brut :initform (list (gil::add-int-var-array *sp* *cf-last-index -12 12) nil nil nil))
+))
+
+; @completely new or reworked
 (defclass counterpoint-class () (
+    ; to remove (deprecated)
+    (is-cf-bass-arr :accessor is-cf-bass-arr :initarg :is-cf-bass-arr :initform (list nil nil nil nil))
+
     ; species
     (species :accessor species :initarg :species :initform nil)
 
@@ -155,7 +186,6 @@
     (m-intervals :accessor m-intervals :initarg :m-intervals :initform (list nil nil nil nil))
     (motions :accessor motions :initarg :motions :initform (list nil nil nil nil))
     (motions-cost :accessor motions-cost :initarg :motions-cost :initform (list nil nil nil nil))
-    (is-cf-bass-arr :accessor is-cf-bass-arr :initarg :is-cf-bass-arr :initform (list nil nil nil nil))
     (m2-intervals-brut :accessor m2-intervals-brut :initarg :m2-intervals-brut :initform nil)
     (m2-intervals :accessor m2-intervals :initarg :m2-intervals :initform nil)
     (cf-brut-m-intervals :accessor cf-brut-m-intervals :initarg :cf-brut-m-intervals :initform nil)
@@ -210,7 +240,7 @@
 
     ; 6st species variables
     (variety-cost :accessor variety-cost :initarg :variety-cost :initform nil)
-    (is-voice-bass :accessor is-voice-bass :initarg :is-voice-bass :initform 0)
+    (is-cp-bass :accessor is-cp-bass :initarg :is-cp-bass :initform (list nil nil nil nil))
 ))
 
 ; @completely new or reworked
@@ -234,13 +264,91 @@
             ; set the domain of the only barrowed notes
             (off-domain (intersection cp-range *off-scale))
             )
-            (make-instance 'counterpoint-class :cp-range cp-range
-                                               :cp-domain cp-domain
-                                               :chromatic-cp-domain chromatic-cp-domain
-                                               :extended-cp-domain extended-cp-domain
-                                               :off-domain off-domain
-                                               :voice-type voice-type
-                                               :species species)
+                (setf counterpoint (make-instance 'counterpoint-class 
+                                                :cp-range cp-range
+                                                :cp-domain cp-domain
+                                                :chromatic-cp-domain chromatic-cp-domain
+                                                :extended-cp-domain extended-cp-domain
+                                                :off-domain off-domain
+                                                :voice-type voice-type
+                                                :species species
+                ))
+                (case species
+                    ((1 2 3) (progn
+                        ; add the counterpoint array to the space with the domain *cp-domain
+                        (setf (first (cp counterpoint)) (gil::add-int-var-array-dom *sp* *cf-len (extended-cp-domain counterpoint)))
+
+                        ; ======= 2 counterpoints specific
+                        (if (eq *N-VOICES 2) (let ( ; if re-mi-la-si is the last cf note then you can use a major third even if it's not in the harmony
+                            (tonal (mod (car (last *cf)) 12))
+                            )
+                            (case tonal ((2 4 9 10) 
+                                ; using the chromatic domain as it is going to be constrained to the harmonic triad by a later constraint
+                                (setf (nth *cf-last-index (first (cp counterpoint))) (gil::add-int-var-dom *sp* (chromatic-cp-domain counterpoint))) 
+                            )))
+                        )
+                        ; =======
+                        (if (is-borrow-allowed) (case species ((1 6)
+                            ; then add to the penultimate note more possibilities
+                            (setf (nth *cf-penult-index (first (cp counterpoint))) (gil::add-int-var-dom *sp* (chromatic-cp-domain counterpoint))) 
+                        )))
+                        (case species
+                            (2 (progn
+                                ; add the arsis counterpoint array (of [*cf-len - 1] length) to the space with the domain cp-domain
+                                (setf (third (cp counterpoint)) (gil::add-int-var-array-dom *sp* *cf-last-index (extended-cp-domain counterpoint)))
+                                ; add to the penultimate note more possibilities
+                                (if (is-borrow-allowed)
+                                    (setf (nth *cf-penult-index (third (cp counterpoint))) (gil::add-int-var-dom *sp* (chromatic-cp-domain counterpoint)))
+                                )
+                            ))
+                            (3 (progn
+                                (loop for i from 1 to 3 do
+                                    ; add all quarter notes to the space with the domain (cp-domain counterpoint)
+                                    (setf (nth i (cp counterpoint)) (gil::add-int-var-array-dom *sp* *cf-last-index (extended-cp-domain counterpoint)))
+                                    
+                                    (if (and (eq i 3) (is-borrow-allowed))
+                                        ; then add to the penultimate note more possibilities
+                                        (setf (nth *cf-penult-index (nth i (cp counterpoint))) (gil::add-int-var-dom *sp* (chromatic-cp-domain counterpoint)))
+                                    )
+                                )
+                            ))
+                        )
+                    ))
+                    (4 (progn
+                        ; add the arsis counterpoint array (of [*cf-len - 1] length) to the space with the domain (cp-domain counterpoint)
+                        (setf (third (cp counterpoint)) (gil::add-int-var-array-dom *sp* *cf-last-index (extended-cp-domain counterpoint)))
+                        (setf (first (cp counterpoint)) (gil::add-int-var-array-dom *sp* *cf-last-index (extended-cp-domain counterpoint)))
+                        ; add to the penultimate note more possibilities
+                        (if (is-borrow-allowed)
+                            (progn
+                            (setf (nth *cf-penult-index (third (cp counterpoint))) (gil::add-int-var-dom *sp* (chromatic-cp-domain counterpoint)))
+                            (setf (nth *cf-penult-index (first (cp counterpoint))) (gil::add-int-var-dom *sp* (chromatic-cp-domain counterpoint)))
+                            )
+                        )
+                    ))
+                    (5 (progn
+                        (loop for i from 0 to 3 do
+                            (if (eq i 0)
+                                (progn
+                                    ; add all quarter notes to the space with the domain (cp counterpoint)-domain
+                                    (setf (nth i (cp counterpoint)) (gil::add-int-var-array-dom *sp* *cf-len (extended-cp-domain counterpoint)))
+                                    ; then add to the penultimate note more possibilities
+                                    (if (is-borrow-allowed)
+                                        (setf (nth *cf-penult-index (nth i (cp counterpoint))) (gil::add-int-var-dom *sp* (chromatic-cp-domain counterpoint)))
+                                    )
+                                )
+                                (progn
+                                    ; same as above but 1 note shorter
+                                    (setf (nth i (cp counterpoint)) (gil::add-int-var-array-dom *sp* *cf-last-index (extended-cp-domain counterpoint)))
+                                    (if (is-borrow-allowed)
+                                        (setf (nth *cf-penult-index (nth i (cp counterpoint))) (gil::add-int-var-dom *sp* (chromatic-cp-domain counterpoint)))
+                                    )
+                                )
+                            )
+                        )
+                    ))
+                )
+                counterpoint
             )
         )
     )
@@ -262,18 +370,11 @@
     (print (list "Choosing species: " species-list))
     (setq counterpoints (make-list *N-VOICES :initial-element nil))
     (dotimes (i *N-VOICES) (setf (nth i counterpoints) (init-counterpoint (nth i *voices-types) (nth i species-list))))
-    #| TO BE CORRECTED 
-    (if (and (< (first *voices-types) 0) (< (first *voices-types) (second *voices-types)))
-        (setf *nth-voice-is-bass 0)
-        (if (< (second *voices-types) 0)
-            (setf *nth-voice-is-bass 1)
-            (setf *nth-voice-is-bass -1) ; counterpoint is the bass
-        )
-    )
-    (if (>= *nth-voice-is-bass 0) (setf (is-voice-bass (nth *nth-voice-is-bass counterpoints)) 1))
-    |#
-    ;(setq *cost-indexes (make-instance 'cost-indexes-class))
-    (case (length species-list)
+
+    (create-is-voice-bass-arr *cf counterpoints)
+    (create-m-intervals-self (first (cp *bass-notes)) (first (m-intervals *bass-notes)) (first (m-intervals-brut *bass-notes)))
+    (setf *cf-is-bass (list nil nil nil nil))
+    (case *N-VOICES
         (1 (case (first species-list) ; if only two voices
             (1 (progn
                 (fux-cp-1st (first counterpoints))
@@ -460,8 +561,8 @@
         ; print the solution from GiL
         (print "Solution: ")
         (print (list "h-intervals1 = " (gil::g-values sol (first (h-intervals (first counterpoints))))))
-        (print (list "h-intervals2 = " (gil::g-values sol (first (h-intervals (second counterpoints))))))
-        (print (list "h-intervals1-2 = " (gil::g-values sol (first *h-intervals-1-2))))
+        ;(print (list "h-intervals2 = " (gil::g-values sol (first (h-intervals (second counterpoints))))))
+        ;(print (list "h-intervals1-2 = " (gil::g-values sol (first *h-intervals-1-2))))
         (print (list "ALL_CONS_VAR = " (gil::g-values sol ALL_CONS_VAR)))
         (print (list "cp1 = " (gil::g-values sol (first (cp (first counterpoints))))))
         

@@ -15,26 +15,6 @@
     ;; initialize the variables
     (print "Initializing variables...")
     
-    ; add the counterpoint array to the space with the domain *cp-domain
-    (setf (first (cp counterpoint)) (gil::add-int-var-array-dom *sp* *cf-len (extended-cp-domain counterpoint)))
-    
-    ; @completely new or reworked
-    ; ======= 2 counterpoints specific
-    (if (eq *N-VOICES 2) (let ( ; if re-mi-la-si is the last cf note then you can use a major third even if it's not in the harmony
-        (tonal (mod (car (last *cf)) 12))
-        )
-        (case tonal ((2 4 9 10) 
-            ; using the chromatic domain as it is going to be constrained to the harmonic triad by a later constraint
-            (setf (nth *cf-last-index (first (cp counterpoint))) (gil::add-int-var-dom *sp* (chromatic-cp-domain counterpoint))) 
-        )))
-    )
-    ; =======
-
-    (if (is-borrow-allowed) (case species ((1 6)
-        ; then add to the penultimate note more possibilities
-        (setf (nth *cf-penult-index (first (cp counterpoint))) (gil::add-int-var-dom *sp* (chromatic-cp-domain counterpoint))) 
-    )))
-
     ; creating harmonic intervals array
     (print "Creating harmonic intervals array...")
 
